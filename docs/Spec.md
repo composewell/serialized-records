@@ -47,11 +47,22 @@ The serialized data can understand the following types:
 5. records :: `Record`
 6. lists   :: `[a]`
 
-# Influence
+# Comparision
 
 ## Protobuf
 
-TODO
+Protobuf does a binary serialization of the values.
+
+It does not encode the types or the positions of the data. It's straightforward
+binary serialization just like the `Serialize` typeclass in streamly.
+
+Hence this increases maintainance overhead to achieve backward and forward
+compatibility.
+
+Protobuf also does not have the ability only deserialize specific fields as it
+has no idea of the position of these fields in the array.
+
+Reference: https://protobuf.dev/programming-guides/encoding/
 
 ## JSON
 
