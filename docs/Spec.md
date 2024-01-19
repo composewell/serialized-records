@@ -29,10 +29,11 @@ k bytes := key
 4 bytes := index of the value in the body :: Int32
 ```
 
+A negative index of the value signifies nullability.
+
 ### BodyElement
 
 ```
-1 byte  := boolean that denotes the presense of the field
 f bytes := serialized value of the field
 ```
 
