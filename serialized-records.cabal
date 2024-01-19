@@ -29,6 +29,9 @@ library
         TypeSynonymInstances
         FlexibleInstances
         InstanceSigs
+        FlexibleContexts
+        UndecidableInstances
+        CPP
     build-depends:    base
                     , streamly-core
     hs-source-dirs:   src

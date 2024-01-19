@@ -18,7 +18,8 @@
 32 bytes := type hash
  2 bytes := length of header :: Int32
  h bytes := header :: [HeaderElement]
- m bytes := body :: [BodyElement]
+ m bytes := static body :: [StaticBodyElement]
+ n bytes := dynamic body :: [DynamicBodyElement]
 ```
 
 ### HeaderElement
@@ -29,11 +30,12 @@ k bytes := key
 4 bytes := index of the value in the body :: Int32
 ```
 
-A negative index of the value signifies nullability.
+A 0 index of the value signifies nullability.
 
-### BodyElement
+### DynamicBodyElement
 
 ```
+4 bytes := length of the field :: Int32
 f bytes := serialized value of the field
 ```
 
