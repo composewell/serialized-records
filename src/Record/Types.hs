@@ -36,17 +36,26 @@ import qualified Streamly.Internal.Data.MutByteArray as Serialize
 offsetVersion :: Int
 offsetVersion = 0
 
+lenVersion :: Int
+lenVersion = 2
+
 offsetMessageLen :: Int
 offsetMessageLen = 2
+
+lenMessageLen :: Int
+lenMessageLen = 4
 
 offsetTypeHash :: Int
 offsetTypeHash = 6
 
-typeHashLen :: Int
-typeHashLen = 32
+lenTypeHash :: Int
+lenTypeHash = 32
 
 offsetHeaderLen :: Int
 offsetHeaderLen = 38
+
+lenHeaderLen :: Int
+lenHeaderLen = 2
 
 offsetHeaderBody :: Int
 offsetHeaderBody = 40
@@ -84,15 +93,16 @@ class IsRecordPrimitive b => ValueMapper a b | a -> b where
 class HasField k r v | k r -> v where
     getField :: k -> r -> v
 
-class RecordMeta k where
-    typeHash :: Proxy k -> Array Word8
+class IsRecordable a where
+    typeHash :: Proxy a -> Array Word8
+    createRecord :: a -> Record a
 
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
 
-instance forall a. RecordMeta (Record a) => IsRecordPrimitive (Record a) where
-    recPrimHash = typeHash
+instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
+    recPrimHash _ = typeHash (Proxy :: Proxy a)
     recPrimAddSizeTo i (Record _ arr) = i + 4 + Array.length arr
     recPrimSerializeAt i target (Record _ (Array src start end)) = do
         let arrLen = end - start
@@ -104,7 +114,7 @@ instance forall a. RecordMeta (Record a) => IsRecordPrimitive (Record a) where
         let len = i32_i len32
             record = Array arr i1 (i1 + len)
             encodedTypeHash = getEncodedTypeHash record
-            typeMatch = typeHash (Proxy :: Proxy (Record a)) == encodedTypeHash
+            typeMatch = typeHash (Proxy :: Proxy a) == encodedTypeHash
         pure $ (4 + len, Record typeMatch record)
 
 instance IsRecordPrimitive Utf8 where
@@ -155,7 +165,7 @@ instance ValueMapper Utf8 Utf8 where
     toValue = id
     fromValue = id
 
-instance RecordMeta (Record a) => ValueMapper (Record a) (Record a) where
+instance IsRecordable a => ValueMapper (Record a) (Record a) where
     toValue = id
     fromValue = id
 
@@ -196,6 +206,22 @@ encodeSimpleString val =
         $ Array.fromStreamN (length val)
         $ Encoding.encodeLatin1' $ Stream.fromList val
 
+{-# INLINE unsafePutCompleteSlice #-}
+unsafePutCompleteSlice :: Int -> MutByteArray -> Array Word8 -> IO Int
+unsafePutCompleteSlice i target (Array src start end) = do
+    let size = end - start
+    Serialize.putSliceUnsafe src start target i size
+    pure $ i + size
+
+{-# INLINE unsafePutHeaderKey #-}
+unsafePutHeaderKey :: Int -> MutByteArray -> String -> IO Int
+unsafePutHeaderKey i target key = do
+    let (Array src start end) = encodeSimpleString key
+        size = end - start
+    i1 <- recPrimSerializeAt i target (i_i16 size :: Int16)
+    Serialize.putSliceUnsafe src start target i1 size
+    pure $ i1 + size
+
 {-# INLINE arr0To9 #-}
 arr0To9 :: Array Word8
 arr0To9 = encodeSimpleString "0123456789"
@@ -211,6 +237,10 @@ i_i32 = fromIntegral
 {-# INLINE i16_i #-}
 i16_i :: Int16 -> Int
 i16_i = fromIntegral
+
+{-# INLINE i_i16 #-}
+i_i16 :: Int -> Int16
+i_i16 = fromIntegral
 
 {-# INLINE deserializeAt_ #-}
 deserializeAt_ :: IsRecordPrimitive a => Int -> Array Word8 -> IO a
