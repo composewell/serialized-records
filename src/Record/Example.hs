@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Record.Example where
 
@@ -26,10 +25,9 @@ data Address = Address
 
 -- This should be derived via template-haskell helpers
 instance IsRecordable Address where
-    --   2
-    -- + 2 + length "zipCode" + 4 -- 13
+    --   2 + length "zipCode" + 4 -- 13
     -- + 2 + length "country" + 4 -- 13
-    -- headerLength _ = 28
+    -- headerLength _ = 26
 
     -- TODO: Use xxHash here and use a builder like combination
     typeHash _ = Array.getSliceUnsafe 0 32 $
@@ -46,14 +44,14 @@ instance IsRecordable Address where
                     + lenMessageLen
                     + lenTypeHash
                     + lenHeaderLen
-                    + 28 -- headerLength
+                    + 26 -- headerLength
         arr <- Serialize.new size
         let i0 = 0
         i1 <- recPrimSerializeAt i0 arr (0 :: Int16)
         i2 <- recPrimSerializeAt i1 arr (i_i32 size)
         let hash = typeHash (Proxy :: Proxy Address)
         i3 <- unsafePutCompleteSlice i2 arr hash
-        i4 <- recPrimSerializeAt i3 arr (28 :: Int16)
+        i4 <- recPrimSerializeAt i3 arr (26 :: Int16)
         i5 <- unsafePutHeaderKey i4 arr "zipCode"
         let i6 = i5 + 4
         i7 <- unsafePutHeaderKey i6 arr "country"
@@ -67,16 +65,16 @@ instance IsRecordable Address where
 instance HasField (Proxy "zipCode") (Record Address) Int where
 
     getField :: Proxy "zipCode" -> Record Address -> Int
-    getField _ (Record True arr) = getFieldTrustedStatic (offsetMessageBody 28) arr
+    getField _ (Record True arr) = getFieldTrustedStatic (offsetMessageBody 26) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "zipCode") arr
+        fromJust $ getFieldUntrusted 26 (encodeSimpleString "zipCode") arr
 
 instance HasField (Proxy "country") (Record Address) String where
 
     getField :: Proxy "country" -> Record Address -> String
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 28) + 8) arr
+    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 26) + 8) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "country") arr
+        fromJust $ getFieldUntrusted 26 (encodeSimpleString "country") arr
 
 --------------------------------------------------------------------------------
 -- User
@@ -93,13 +91,12 @@ data User = User
 -- TODO: order is decided by the TH combinators
 -- order: [age, height, isMarried, name, address]
 instance IsRecordable User where
-    --   2
-    -- + 2 + length "name"      + 4 -- 10
+    --   2 + length "name"      + 4 -- 10
     -- + 2 + length "age"       + 4 -- 9
     -- + 2 + length "height"    + 4 -- 12
     -- + 2 + length "isMarried" + 4 -- 15
     -- + 2 + length "address"   + 4 -- 13
-    -- headerLength _ = 61
+    -- headerLength _ = 59
 
     -- TODO: Use xxHash here and use a builder like combination
     typeHash _ = Array.getSliceUnsafe 0 32 $
@@ -130,14 +127,14 @@ instance IsRecordable User where
                     + lenMessageLen
                     + lenTypeHash
                     + lenHeaderLen
-                    + 61 -- headerLength
+                    + 59 -- headerLength
         arr <- Serialize.new size
         let i0 = 0
         i1 <- recPrimSerializeAt i0 arr (0 :: Int16)
         i2 <- recPrimSerializeAt i1 arr (i_i32 size)
         let hash = typeHash (Proxy :: Proxy User)
         i3 <- unsafePutCompleteSlice i2 arr hash
-        i4 <- recPrimSerializeAt i3 arr (61 :: Int16)
+        i4 <- recPrimSerializeAt i3 arr (59 :: Int16)
         i5 <- unsafePutHeaderKey i4 arr "age"
         let i6 = i5 + 4
         i7 <- unsafePutHeaderKey i6 arr "height"
@@ -163,44 +160,91 @@ instance IsRecordable User where
 instance HasField (Proxy "age") (Record User) Int where
 
     getField :: Proxy "age" -> Record User -> Int
-    getField _ (Record True arr) = getFieldTrustedStatic (offsetMessageBody 61) arr
+    getField _ (Record True arr) = getFieldTrustedStatic (offsetMessageBody 59) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "age") arr
+        fromJust $ getFieldUntrusted 59 (encodeSimpleString "age") arr
 
 instance HasField (Proxy "height") (Record User) Double where
 
     getField :: Proxy "height" -> Record User -> Double
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 61) + 8) arr
+    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 8) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "height") arr
+        fromJust $ getFieldUntrusted 59 (encodeSimpleString "height") arr
 
 instance HasField (Proxy "isMarried") (Record User) Bool where
 
     getField :: Proxy "isMarried" -> Record User -> Bool
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 61) + 16) arr
+    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 16) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "isMarried") arr
+        fromJust $ getFieldUntrusted 59 (encodeSimpleString "isMarried") arr
 
 instance HasField (Proxy "name") (Record User) String where
 
     getField :: Proxy "name" -> Record User -> String
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 61) + 17) arr
+    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 17) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "name") arr
+        fromJust $ getFieldUntrusted 59 (encodeSimpleString "name") arr
 
 instance HasField (Proxy "address") (Record User) (Record Address) where
 
     getField :: Proxy "address" -> Record User -> (Record Address)
     getField _ (Record True arr) = getFieldTrustedDynamic (offsetHeaderBody + 55) arr
     getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 28 (encodeSimpleString "address") arr
+        fromJust $ getFieldUntrusted 59 (encodeSimpleString "address") arr
 
 --------------------------------------------------------------------------------
 -- Example
 --------------------------------------------------------------------------------
 
-userRecord :: Record User
-userRecord = error "Unimplemented"
+addressRecord :: Record Address
+addressRecord =
+    createRecord $ Address
+        { zipCode = 123456
+        , country = "India"
+        }
 
-nameField :: String
-nameField = getField @(Proxy "name") Proxy userRecord
+userRecord :: Record User
+userRecord =
+    createRecord $ User
+        { name = "Adithya"
+        , age = 26
+        , height = 183.5
+        , isMarried = True
+        , address = addressRecord
+        }
+
+main :: IO ()
+main = do
+    print $ getField @(Proxy "zipCode") Proxy addressRecord
+    print $ getField @(Proxy "country") Proxy addressRecord
+
+    print $ getField @(Proxy "name") Proxy userRecord
+    print $ getField @(Proxy "age") Proxy userRecord
+    print $ getField @(Proxy "height") Proxy userRecord
+    print $ getField @(Proxy "isMarried") Proxy userRecord
+
+    print
+        $ getField @(Proxy "zipCode") Proxy
+        $ getField @(Proxy "address") Proxy userRecord
+
+    print
+        $ getField @(Proxy "country") Proxy
+        $ getField @(Proxy "address") Proxy userRecord
+
+    putStrLn ""
+
+    print $ getField @(Proxy "zipCode") Proxy $ breakTrust addressRecord
+    print $ getField @(Proxy "country") Proxy $ breakTrust addressRecord
+
+    print $ getField @(Proxy "name") Proxy $ breakTrust userRecord
+    print $ getField @(Proxy "age") Proxy $ breakTrust userRecord
+    print $ getField @(Proxy "height") Proxy $ breakTrust userRecord
+    print $ getField @(Proxy "isMarried") Proxy $ breakTrust userRecord
+
+    print
+        $ getField @(Proxy "zipCode") Proxy
+        $ breakTrust $ getField @(Proxy "address") Proxy $ breakTrust userRecord
+
+    print
+        $ getField @(Proxy "country") Proxy
+        $ breakTrust $ getField @(Proxy "address") Proxy $ breakTrust userRecord

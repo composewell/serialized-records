@@ -64,7 +64,7 @@ offsetMessageBody :: Int -> Int
 offsetMessageBody headerLen = offsetHeaderBody + headerLen
 
 getEncodedTypeHash :: Array Word8 -> Array Word8
-getEncodedTypeHash = Array.getSliceUnsafe offsetTypeHash (offsetTypeHash + 32)
+getEncodedTypeHash = Array.getSliceUnsafe offsetTypeHash 32
 
 --------------------------------------------------------------------------------
 -- Types
@@ -73,9 +73,12 @@ getEncodedTypeHash = Array.getSliceUnsafe offsetTypeHash (offsetTypeHash + 32)
 -- Record a b
 -- a == Is True iff the typehash matched
 -- b == Record representation
-data Record a = Record Bool (Array Word8)
+data Record a = Record Bool (Array Word8) deriving (Show)
 
 newtype Utf8 = Utf8 (Array Word8)
+
+breakTrust :: Record a -> Record a
+breakTrust (Record _ arr) = Record False arr
 
 -- Should we use MutByteArray here?
 class IsRecordPrimitive a where
@@ -246,7 +249,8 @@ i_i16 = fromIntegral
 deserializeAt_ :: IsRecordPrimitive a => Int -> Array Word8 -> IO a
 deserializeAt_ i arr =
     fmap snd
-        $ recPrimDeserializeAt i
+        $ recPrimDeserializeAt
+              (Array.arrStart arr + i)
               (Array.arrContents arr)
               (Array.arrStart arr + Array.length arr)
 
