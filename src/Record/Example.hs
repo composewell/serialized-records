@@ -20,7 +20,7 @@ import qualified Streamly.Internal.Data.MutByteArray as Serialize
 
 data Address = Address
     { zipCode :: Int
-    , country :: Maybe String
+    , country :: Maybe (Maybe (Maybe String))
     }
 
 -- This should be derived via template-haskell helpers
@@ -77,9 +77,9 @@ instance HasField (Proxy "zipCode") (Record Address) Int where
     getField _ (Record False arr) =
         fromJust $ getFieldUntrusted 26 (encodeSimpleString "zipCode") arr
 
-instance HasField (Proxy "country") (Record Address) (Maybe String) where
+instance HasField (Proxy "country") (Record Address) (Maybe (Maybe (Maybe String))) where
 
-    getField :: Proxy "country" -> Record Address -> Maybe String
+    getField :: Proxy "country" -> Record Address -> Maybe (Maybe (Maybe String))
     getField _ (Record True arr) =
         case getFieldTrustedNullable (offsetHeaderBody + 22) arr of
             Nothing -> Nothing
@@ -214,7 +214,7 @@ addressRecord :: Record Address
 addressRecord =
     createRecord $ Address
         { zipCode = 123456
-        , country = Nothing
+        , country = Just (Just Nothing)
         }
 
 userRecord :: Record User
