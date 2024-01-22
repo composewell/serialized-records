@@ -164,6 +164,23 @@ instance IsRecordPrimitive Int16 where
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
+-- NOTE: Maybe is a special type and is handled differently. The check for maybe
+-- occurs in the header, then and only then the serialization proceeds further.
+instance IsRecordPrimitive a => IsRecordPrimitive (Maybe a) where
+    -- TODO: Use builder like combination
+    recPrimHash _ =
+        Array.getSliceUnsafe 7 8 arr0To9 <> recPrimHash (Proxy :: Proxy a)
+    recPrimAddSizeTo i Nothing = i
+    recPrimAddSizeTo i (Just a) = recPrimAddSizeTo i a
+    recPrimSerializeAt _ _ _ = undefined
+    recPrimDeserializeAt _ _ _ = undefined
+
+instance ValueMapper a b => ValueMapper (Maybe a) (Maybe b) where
+    toValue Nothing = Nothing
+    toValue (Just a) = Just $ toValue a
+    fromValue Nothing = Nothing
+    fromValue (Just b) = Just $ fromValue b
+
 instance ValueMapper Utf8 Utf8 where
     toValue = id
     fromValue = id
@@ -197,10 +214,14 @@ instance ValueMapper String Utf8 where
             $ Encoding.decodeUtf8Chunks
             $ Stream.fromList [arr]
 
-
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
+
+flattenNullable :: Maybe (Maybe a) -> Maybe a
+flattenNullable Nothing = Nothing
+flattenNullable (Just Nothing) = Nothing
+flattenNullable (Just (Just a)) = Just a
 
 {-# INLINE encodeSimpleString #-}
 encodeSimpleString :: String -> Array Word8
@@ -283,13 +304,13 @@ getFieldTrustedDynamic ix recArr =
         ix1 <- i32_i <$> deserializeAt_ ix recArr
         fromValue <$> deserializeAt_ ix1 recArr
 
-{-# INLINE getFieldTrustedDynamicNullable #-}
-getFieldTrustedDynamicNullable
+{-# INLINE getFieldTrustedNullable #-}
+getFieldTrustedNullable
     :: (IsRecordPrimitive a, ValueMapper b a)
     => Int
     -> Array Word8
     -> Maybe b
-getFieldTrustedDynamicNullable ix recArr =
+getFieldTrustedNullable ix recArr =
     unsafeInlineIO $ do
         ix1 <- i32_i <$> deserializeAt_ ix recArr
         if ix1 == 0

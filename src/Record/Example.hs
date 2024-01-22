@@ -20,7 +20,7 @@ import qualified Streamly.Internal.Data.MutByteArray as Serialize
 
 data Address = Address
     { zipCode :: Int
-    , country :: String
+    , country :: Maybe String
     }
 
 -- This should be derived via template-haskell helpers
@@ -37,7 +37,8 @@ instance IsRecordable Address where
 
     createRecord addr = unsafePerformIO $ do
         let zipCode_ = toValue $ zipCode addr
-            country_ = toValue $ country addr
+            country_ =
+                toValue $ flattenNullable $ flattenNullable $ country addr
             size =
                 recPrimAddSizeTo (recPrimAddSizeTo 0 zipCode_) country_
                     + lenVersion
@@ -58,8 +59,15 @@ instance IsRecordable Address where
         let i8 = i7 + 4
         void $ recPrimSerializeAt i5 arr (i_i32 i8 :: Int32)
         i9 <- recPrimSerializeAt i8 arr zipCode_
-        void $ recPrimSerializeAt i7 arr (i_i32 i9 :: Int32)
-        i10 <- recPrimSerializeAt i9 arr country_
+
+        -- Special handling of Nullable values
+        i10 <- case country_ of
+            Nothing -> do
+                void $ recPrimSerializeAt i7 arr (0 :: Int32)
+                pure i9
+            Just val -> do
+                void $ recPrimSerializeAt i7 arr (i_i32 i9 :: Int32)
+                recPrimSerializeAt i9 arr val
         pure $ Record True $ Array arr 0 i10
 
 instance HasField (Proxy "zipCode") (Record Address) Int where
@@ -69,12 +77,18 @@ instance HasField (Proxy "zipCode") (Record Address) Int where
     getField _ (Record False arr) =
         fromJust $ getFieldUntrusted 26 (encodeSimpleString "zipCode") arr
 
-instance HasField (Proxy "country") (Record Address) String where
+instance HasField (Proxy "country") (Record Address) (Maybe String) where
 
-    getField :: Proxy "country" -> Record Address -> String
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 26) + 8) arr
-    getField _ (Record False arr) =
-        fromJust $ getFieldUntrusted 26 (encodeSimpleString "country") arr
+    getField :: Proxy "country" -> Record Address -> Maybe String
+    getField _ (Record True arr) =
+        case getFieldTrustedNullable (offsetHeaderBody + 22) arr of
+            Nothing -> Nothing
+            Just res -> Just $ Just $ Just res
+    getField _ (Record False arr) = do
+        -- Special handling of Nullable values
+        case getFieldUntrusted 26 (encodeSimpleString "country") arr of
+            Nothing -> Nothing
+            Just res -> Just $ Just $ Just res
 
 --------------------------------------------------------------------------------
 -- User
@@ -200,7 +214,7 @@ addressRecord :: Record Address
 addressRecord =
     createRecord $ Address
         { zipCode = 123456
-        , country = "India"
+        , country = Nothing
         }
 
 userRecord :: Record User
