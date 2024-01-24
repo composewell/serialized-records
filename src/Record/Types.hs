@@ -102,9 +102,21 @@ class IsRecordable a where
     isRecordStatic :: Proxy a -> Bool
     createRecord :: a -> Record a
 
+class NullableMeta a where
+    isNullable :: Proxy a -> Bool
+    nullabilityLevel :: Proxy a -> Int
+
 --------------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------------
+
+instance forall a. NullableMeta a => NullableMeta (Maybe a) where
+    isNullable _ = True
+    nullabilityLevel _ = 1 + nullabilityLevel (Proxy :: Proxy a)
+
+instance {-# OVERLAPPABLE #-} NullableMeta a where
+    isNullable _ = False
+    nullabilityLevel _ = 0
 
 instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
     recPrimHash _ = typeHash (Proxy :: Proxy a)
