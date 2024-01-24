@@ -3,6 +3,7 @@
 module Record.Example where
 
 import Record.Types
+import Record.TH
 
 import Control.Monad (void)
 import Data.Int (Int16, Int32)
@@ -55,10 +56,8 @@ instance IsRecordable Address where
         let hash = typeHash (Proxy :: Proxy Address)
         i3 <- unsafePutCompleteSlice i2 arr hash
         i4 <- recPrimSerializeAt i3 arr (26 :: Int16)
-        i5 <- unsafePutHeaderKey i4 arr "zipCode"
-        let i6 = i5 + 4
-        i7 <- unsafePutHeaderKey i6 arr "country"
-        let i8 = i7 + 4
+        (i5, i6) <- unsafePutHeaderKey i4 arr "zipCode"
+        (i7, i8) <- unsafePutHeaderKey i6 arr "country"
         void $ recPrimSerializeAt i5 arr (i_i32 i8 :: Int32)
         i9 <- recPrimSerializeAt i8 arr zipCode_
 
@@ -116,11 +115,11 @@ instance IsRecordable User where
 
     -- TODO: Use xxHash here and use a builder like combination
     typeHash _ = Array.getSliceUnsafe 0 32 $
-           encodeSimpleString "name" <> recPrimHash (toValueProxy (Proxy :: Proxy String))
-        <> encodeSimpleString "age" <> recPrimHash (toValueProxy (Proxy :: Proxy Int))
+        encodeSimpleString "age" <> recPrimHash (toValueProxy (Proxy :: Proxy Int))
         <> encodeSimpleString "height" <> recPrimHash (toValueProxy (Proxy :: Proxy Double))
         <> encodeSimpleString "isMarried" <> recPrimHash (toValueProxy (Proxy :: Proxy Bool))
         <> encodeSimpleString "address" <> recPrimHash (toValueProxy (Proxy :: Proxy (Record Address)))
+        <> encodeSimpleString "name" <> recPrimHash (toValueProxy (Proxy :: Proxy String))
         <> Array.fromList (replicate 32 0)
 
     isRecordStatic _ = False
@@ -153,16 +152,11 @@ instance IsRecordable User where
         let hash = typeHash (Proxy :: Proxy User)
         i3 <- unsafePutCompleteSlice i2 arr hash
         i4 <- recPrimSerializeAt i3 arr (59 :: Int16)
-        i5 <- unsafePutHeaderKey i4 arr "age"
-        let i6 = i5 + 4
-        i7 <- unsafePutHeaderKey i6 arr "height"
-        let i8 = i7 + 4
-        i9 <- unsafePutHeaderKey i8 arr "isMarried"
-        let i10 = i9 + 4
-        i11 <- unsafePutHeaderKey i10 arr "name"
-        let i12 = i11 + 4
-        i13 <- unsafePutHeaderKey i12 arr "address"
-        let i14 = i13 + 4
+        (i5, i6) <- unsafePutHeaderKey i4 arr "age"
+        (i7, i8) <- unsafePutHeaderKey i6 arr "height"
+        (i9, i10) <- unsafePutHeaderKey i8 arr "isMarried"
+        (i11, i12) <- unsafePutHeaderKey i10 arr "address"
+        (i13, i14) <- unsafePutHeaderKey i12 arr "name"
         void $ recPrimSerializeAt i5 arr (i_i32 i14 :: Int32)
         i15 <- recPrimSerializeAt i14 arr age_
         void $ recPrimSerializeAt i7 arr (i_i32 i15 :: Int32)
@@ -170,9 +164,9 @@ instance IsRecordable User where
         void $ recPrimSerializeAt i9 arr (i_i32 i16 :: Int32)
         i17 <- recPrimSerializeAt i16 arr isMarried_
         void $ recPrimSerializeAt i11 arr (i_i32 i17 :: Int32)
-        i18 <- recPrimSerializeAt i17 arr name_
+        i18 <- recPrimSerializeAt i17 arr address_
         void $ recPrimSerializeAt i13 arr (i_i32 i18 :: Int32)
-        i19 <- recPrimSerializeAt i18 arr address_
+        i19 <- recPrimSerializeAt i18 arr name_
         pure $ Record True $ Array arr 0 i19
 
 instance HasField (Proxy "age") (Record User) Int where
@@ -199,14 +193,14 @@ instance HasField (Proxy "isMarried") (Record User) Bool where
 instance HasField (Proxy "name") (Record User) String where
 
     getField :: Proxy "name" -> Record User -> String
-    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 17) arr
+    getField _ (Record True arr) = getFieldTrustedDynamic (offsetHeaderBody + 55) arr
     getField _ (Record False arr) =
         fromJust $ getFieldUntrusted 59 (encodeSimpleString "name") arr
 
 instance HasField (Proxy "address") (Record User) (Record Address) where
 
     getField :: Proxy "address" -> Record User -> (Record Address)
-    getField _ (Record True arr) = getFieldTrustedDynamic (offsetHeaderBody + 55) arr
+    getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 17) arr
     getField _ (Record False arr) =
         fromJust $ getFieldUntrusted 59 (encodeSimpleString "address") arr
 
@@ -221,15 +215,18 @@ addressRecord =
         , country = Just (Just Nothing)
         }
 
-userRecord :: Record User
-userRecord =
-    createRecord $ User
+hsUser :: User
+hsUser =
+    User
         { name = "Adithya"
         , age = 26
         , height = 183.5
         , isMarried = True
         , address = addressRecord
         }
+
+userRecord :: Record User
+userRecord = createRecord hsUser
 
 main :: IO ()
 main = do

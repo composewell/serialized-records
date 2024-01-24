@@ -18,6 +18,7 @@ module Record.Types where
 import Data.Int (Int16, Int32, Int64)
 import Data.Proxy (Proxy(..))
 import Data.Word (Word8)
+import Data.Maybe (fromMaybe)
 import Streamly.Data.Array (Array)
 import Streamly.Internal.System.IO (unsafeInlineIO)
 import Streamly.Internal.Data.MutByteArray (MutByteArray)
@@ -151,35 +152,35 @@ instance IsRecordPrimitive Utf8 where
         pure $ (4 + len, Utf8 utf8)
 
 instance IsRecordPrimitive Int64 where
-    recPrimHash _ = Array.getSliceUnsafe 1 2 arr0To9
+    recPrimHash _ = Array.getSliceUnsafe 1 1 arr0To9
     recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Double where
-    recPrimHash _ = Array.getSliceUnsafe 2 3 arr0To9
+    recPrimHash _ = Array.getSliceUnsafe 2 1 arr0To9
     recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Bool where
-    recPrimHash _ = Array.getSliceUnsafe 3 4 arr0To9
+    recPrimHash _ = Array.getSliceUnsafe 3 1 arr0To9
     recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Int32 where
-    recPrimHash _ = Array.getSliceUnsafe 5 6 arr0To9
+    recPrimHash _ = Array.getSliceUnsafe 5 1 arr0To9
     recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Int16 where
-    recPrimHash _ = Array.getSliceUnsafe 6 7 arr0To9
+    recPrimHash _ = Array.getSliceUnsafe 6 1 arr0To9
     recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
@@ -190,7 +191,7 @@ instance IsRecordPrimitive Int16 where
 instance IsRecordPrimitive a => IsRecordPrimitive (Maybe a) where
     -- TODO: Use builder like combination
     recPrimHash _ =
-        Array.getSliceUnsafe 7 8 arr0To9 <> recPrimHash (Proxy :: Proxy a)
+        Array.getSliceUnsafe 7 1 arr0To9 <> recPrimHash (Proxy :: Proxy a)
     recPrimIsStatic _ = False
     recPrimAddSizeTo i Nothing = i
     recPrimAddSizeTo i (Just a) = recPrimAddSizeTo i a
@@ -240,6 +241,9 @@ instance ValueMapper String Utf8 where
 -- Helpers
 --------------------------------------------------------------------------------
 
+fromJustErr :: String -> Maybe a -> a
+fromJustErr str = fromMaybe (error str)
+
 flattenNullable :: Maybe (Maybe a) -> Maybe a
 flattenNullable Nothing = Nothing
 flattenNullable (Just Nothing) = Nothing
@@ -260,13 +264,13 @@ unsafePutCompleteSlice i target (Array src start end) = do
     pure $ i + size
 
 {-# INLINE unsafePutHeaderKey #-}
-unsafePutHeaderKey :: Int -> MutByteArray -> String -> IO Int
+unsafePutHeaderKey :: Int -> MutByteArray -> String -> IO (Int, Int)
 unsafePutHeaderKey i target key = do
     let (Array src start end) = encodeSimpleString key
         size = end - start
     i1 <- recPrimSerializeAt i target (i_i16 size :: Int16)
     Serialize.putSliceUnsafe src start target i1 size
-    pure $ i1 + size
+    pure $ (i1 + size, i1 + size + 4)
 
 {-# INLINE arr0To9 #-}
 arr0To9 :: Array Word8
