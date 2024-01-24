@@ -35,6 +35,8 @@ instance IsRecordable Address where
         <> encodeSimpleString "country" <> recPrimHash (toValueProxy (Proxy :: Proxy String))
         <> Array.fromList (replicate 32 0)
 
+    isRecordStatic _ = False
+
     createRecord addr = unsafePerformIO $ do
         let zipCode_ = toValue $ zipCode addr
             country_ =
@@ -120,6 +122,8 @@ instance IsRecordable User where
         <> encodeSimpleString "isMarried" <> recPrimHash (toValueProxy (Proxy :: Proxy Bool))
         <> encodeSimpleString "address" <> recPrimHash (toValueProxy (Proxy :: Proxy (Record Address)))
         <> Array.fromList (replicate 32 0)
+
+    isRecordStatic _ = False
 
     createRecord user = unsafePerformIO $ do
         let name_ = toValue $ name user

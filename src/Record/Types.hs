@@ -83,6 +83,7 @@ breakTrust (Record _ arr) = Record False arr
 -- Should we use MutByteArray here?
 class IsRecordPrimitive a where
     recPrimHash :: Proxy a -> Array Word8
+    recPrimIsStatic :: Proxy a -> Bool
     recPrimAddSizeTo :: Int -> a -> Int
     recPrimSerializeAt :: Int -> MutByteArray -> a -> IO Int
     recPrimDeserializeAt :: Int -> MutByteArray -> Int -> IO (Int, a)
@@ -98,6 +99,7 @@ class HasField k r v | k r -> v where
 
 class IsRecordable a where
     typeHash :: Proxy a -> Array Word8
+    isRecordStatic :: Proxy a -> Bool
     createRecord :: a -> Record a
 
 --------------------------------------------------------------------------------
@@ -106,6 +108,7 @@ class IsRecordable a where
 
 instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
     recPrimHash _ = typeHash (Proxy :: Proxy a)
+    recPrimIsStatic _ = isRecordStatic (Proxy :: Proxy a)
     recPrimAddSizeTo i (Record _ arr) = i + 4 + Array.length arr
     recPrimSerializeAt i target (Record _ (Array src start end)) = do
         let arrLen = end - start
@@ -122,6 +125,7 @@ instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
 
 instance IsRecordPrimitive Utf8 where
     recPrimHash _ = Array.getSliceUnsafe 0 1 arr0To9
+    recPrimIsStatic _ = False
     recPrimAddSizeTo i (Utf8 arr) = i + 4 + Array.length arr
     recPrimSerializeAt i target (Utf8 (Array src start end)) = do
         let arrLen = end - start
@@ -136,30 +140,35 @@ instance IsRecordPrimitive Utf8 where
 
 instance IsRecordPrimitive Int64 where
     recPrimHash _ = Array.getSliceUnsafe 1 2 arr0To9
+    recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Double where
     recPrimHash _ = Array.getSliceUnsafe 2 3 arr0To9
+    recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Bool where
     recPrimHash _ = Array.getSliceUnsafe 3 4 arr0To9
+    recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Int32 where
     recPrimHash _ = Array.getSliceUnsafe 5 6 arr0To9
+    recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
 instance IsRecordPrimitive Int16 where
     recPrimHash _ = Array.getSliceUnsafe 6 7 arr0To9
+    recPrimIsStatic _ = True
     recPrimAddSizeTo = Serialize.addSizeTo
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
@@ -170,6 +179,7 @@ instance IsRecordPrimitive a => IsRecordPrimitive (Maybe a) where
     -- TODO: Use builder like combination
     recPrimHash _ =
         Array.getSliceUnsafe 7 8 arr0To9 <> recPrimHash (Proxy :: Proxy a)
+    recPrimIsStatic _ = False
     recPrimAddSizeTo i Nothing = i
     recPrimAddSizeTo i (Just a) = recPrimAddSizeTo i a
     recPrimSerializeAt _ _ _ = undefined
