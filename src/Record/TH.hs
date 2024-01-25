@@ -410,8 +410,8 @@ expGetFieldUntrusted headerLen re =
     arrName = nsArr defaultNameSpace
 
 decHasField ::
-    Int -> Name -> Name -> (Int, Int, Bool) -> (RecordElement, Type) -> ((Int, Int, Bool), Q Dec)
-decHasField headerLen recTypeName conTypeName offsets (re, typ) =
+    Int -> Name -> (Int, Int, Bool) -> (RecordElement, Type) -> ((Int, Int, Bool), Q Dec)
+decHasField headerLen recTypeName offsets (re, typ) =
     let (offsets1, expGFT) = expGetFieldTrusted offsets re
      in (offsets1, decHF expGFT)
 
@@ -464,7 +464,7 @@ decsHasField (RecordStaticMeta rsmList) recTypeName = do
     go _ _ [] ys = ys
     go conTypeName offsets (x:xs) ys =
         let (offsets1, qdec) =
-                decHasField headerLen recTypeName conTypeName offsets x
+                decHasField headerLen recTypeName offsets x
          in go conTypeName offsets1 xs (qdec:ys)
 
 deriveSerializableInstances ::

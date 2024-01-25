@@ -6,9 +6,6 @@ import Record.Example.Address
 import Record.Types
 import Record.TH
 
-import Data.Maybe (fromJust)
-import Data.Proxy (Proxy(..))
-
 #define DERIVE_TH(x) $(deriveSerializableInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
 
 --------------------------------------------------------------------------------
