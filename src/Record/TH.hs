@@ -65,8 +65,8 @@ getConAndRecFields recTypeName = do
 getRecFields :: Name -> Q [(Name, Type)]
 getRecFields = fmap snd . getConAndRecFields
 
-createRecordMeta :: Name -> Q Exp
-createRecordMeta recTypeName = do
+expRecordMeta :: Name -> Q Exp
+expRecordMeta recTypeName = do
     keyList <- getRecFields recTypeName
     let recElemList = map fieldToRE keyList
     res <- [|RecordStaticMeta (sortRecElemList $(listE recElemList))|]
@@ -113,8 +113,8 @@ sortUsing mapperA mapperB listA listB =
             (fromJust $ findIndex (\a -> mapperA a == mapperB b1) listA)
             (fromJust $ findIndex (\a -> mapperA a == mapperB b2) listA)
 
-createTypeHashExp :: RecordStaticMeta -> Name -> Q Exp
-createTypeHashExp (RecordStaticMeta rsmList) recTypeName = do
+expTypeHash :: RecordStaticMeta -> Name -> Q Exp
+expTypeHash (RecordStaticMeta rsmList) recTypeName = do
     keyList <- map (\(a, b) -> (nameBase a, b)) <$> getRecFields recTypeName
     let sortedKeyList = sortUsing reKey fst rsmList keyList
     foldl1' (\b a -> [|$(b) <> $(a)|]) $ map toHash sortedKeyList
@@ -128,8 +128,8 @@ createTypeHashExp (RecordStaticMeta rsmList) recTypeName = do
 makeV :: Int -> Name
 makeV i = mkName $ "v" ++ show i
 
-makeConvertedValueStatements :: Int -> Q Stmt
-makeConvertedValueStatements numFields =
+stmtToValue :: Int -> Q Stmt
+stmtToValue numFields =
     letS $ map makeLetDec [0..(numFields - 1)]
 
     where
@@ -137,19 +137,19 @@ makeConvertedValueStatements numFields =
     makeLetDec i =
         valD (varP (makeV i)) (normalB [|toValue $(varE (mkFieldName i))|]) []
 
-makeSizeExp :: Int -> Int -> Q Exp
-makeSizeExp numFields headerLen =
+expSize :: Int -> Int -> Q Exp
+expSize numFields headerLen =
     foldl'
         (\b a -> [|recPrimAddSizeTo $(b) $(a)|])
         [|headerLen
               + lenVersion + lenMessageLen + lenTypeHash + lenHeaderLen|]
         (map (varE . makeV) [0..(numFields - 1)])
 
-createPreHeaderSerializationStatements
+stmtPreHeaderSerialization
     :: GlobalNameSpace -> Array Word8 -> RecordStaticMeta -> [Q Stmt]
-createPreHeaderSerializationStatements ns typeHashArr (RecordStaticMeta rsmList) =
-    [ makeConvertedValueStatements (length rsmList)
-    , letS [valD (varP sizeName) (normalB (makeSizeExp numFields headerLen)) []]
+stmtPreHeaderSerialization ns typeHashArr (RecordStaticMeta rsmList) =
+    [ stmtToValue (length rsmList)
+    , letS [valD (varP sizeName) (normalB (expSize numFields headerLen)) []]
     , bindS (varP arrName) [|Serialize.new size|]
     , letS [valD (varP (makeI 0)) (normalB [|0|]) []]
     , bindS
@@ -179,8 +179,8 @@ createPreHeaderSerializationStatements ns typeHashArr (RecordStaticMeta rsmList)
     numFields = length rsmList
     headerLen = getHeaderLength rsmList
 
-createHeaderSerialzationStatements :: GlobalNameSpace -> RecordStaticMeta -> [Q Stmt]
-createHeaderSerialzationStatements ns (RecordStaticMeta rsmList) =
+stmtHeaderSerialzation :: GlobalNameSpace -> RecordStaticMeta -> [Q Stmt]
+stmtHeaderSerialzation ns (RecordStaticMeta rsmList) =
     map
         (\(i, re) -> makeBindS i (reKey re))
         (zip [iOffest..(iOffest + (length rsmList - 1))] rsmList)
@@ -200,9 +200,9 @@ createHeaderSerialzationStatements ns (RecordStaticMeta rsmList) =
                $(stringE keyStr)
             |]
 
-createBodySerializationStatements
+stmtBodySerialization
     :: GlobalNameSpace -> [(Name, Type)] -> RecordStaticMeta -> [Q Stmt]
-createBodySerializationStatements ns conFields (RecordStaticMeta rsmList) =
+stmtBodySerialization ns conFields (RecordStaticMeta rsmList) =
     let indexedFields = indexList reKey (nameBase . fst) rsmList conFields
         valueNames = map (makeV . fst) $ sortOn snd $ (zip [0..] indexedFields)
         nNames = map makeN [0..]
@@ -228,13 +228,13 @@ createBodySerializationStatements ns conFields (RecordStaticMeta rsmList) =
     numFields = length rsmList
     iOffset = 4 + numFields
 
-createStatements
+stmtRecordCreation
     :: GlobalNameSpace -> [(Name, Type)] -> Array Word8 -> RecordStaticMeta -> [Q Stmt]
-createStatements ns reified typeHashArr rsm@(RecordStaticMeta rsmList) =
+stmtRecordCreation ns reified typeHashArr rsm@(RecordStaticMeta rsmList) =
     concat
-        [ createPreHeaderSerializationStatements ns typeHashArr rsm
-        , createHeaderSerialzationStatements ns rsm
-        , createBodySerializationStatements ns reified rsm
+        [ stmtPreHeaderSerialization ns typeHashArr rsm
+        , stmtHeaderSerialzation ns rsm
+        , stmtBodySerialization ns reified rsm
         , [noBindS
                [|pure $ Record True $ Array arr 0 $(varE (makeI lastIOffset))|]]
         ]
@@ -244,8 +244,8 @@ createStatements ns reified typeHashArr rsm@(RecordStaticMeta rsmList) =
     numFields = length rsmList
     lastIOffset = numFields * 2 + 4
 
-createCreateRecordExp :: Array Word8 -> RecordStaticMeta -> Name -> Q Exp
-createCreateRecordExp typeHashArr rsm recTypeName = do
+expCreateRecord :: Array Word8 -> RecordStaticMeta -> Name -> Q Exp
+expCreateRecord typeHashArr rsm recTypeName = do
     let argName = nsArg defaultNameSpace
     (conName, conFields) <- getConAndRecFields recTypeName
     let numFields = length conFields
@@ -254,4 +254,4 @@ createCreateRecordExp typeHashArr rsm recTypeName = do
         [matchConstructor
              conName
              numFields
-             (doE (createStatements defaultNameSpace conFields typeHashArr rsm))]
+             (doE (stmtRecordCreation defaultNameSpace conFields typeHashArr rsm))]
