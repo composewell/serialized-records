@@ -19,8 +19,9 @@ common warnings
 library
     import:           warnings
     exposed-modules:  Record.Types
+                    , Record.Example.User
+                    , Record.Example.Address
                     , Record.Example
-                    , Record.ExampleTH
                     , Record.TH
     default-extensions:
         MultiParamTypeClasses
