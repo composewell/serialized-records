@@ -22,7 +22,7 @@ import Streamly.Internal.Data.MutByteArray
 data RecordElement =
     RecordElement
         { reKey :: String
-        , reIsStatic :: Bool
+        , reStaticSize :: Maybe Int
         , reNullabilityLevel :: Int
         }
     deriving (Show)
@@ -80,7 +80,7 @@ createRecordMeta recTypeName = do
         let xStr = nameBase x
         res <-
             [|RecordElement xStr
-               (recPrimIsStatic (toValueProxy (Proxy :: $(proxyType))))
+               (recPrimStaticSize (toValueProxy (Proxy :: $(proxyType))))
                (nullabilityLevel (toValueProxy (Proxy :: $(proxyType))))
             |]
         pure res
@@ -90,8 +90,8 @@ sortRecElemList = sortBy sorterFunc
 
     where
 
-    sorterFunc (RecordElement _ False _) (RecordElement _ True _) = GT
-    sorterFunc (RecordElement _ True _) (RecordElement _ False _) = LT
+    sorterFunc (RecordElement _ Nothing _) (RecordElement _ (Just _) _) = GT
+    sorterFunc (RecordElement _ (Just _) _) (RecordElement _ Nothing _) = LT
     sorterFunc (RecordElement a _ _) (RecordElement b _ _) = compare a b
 
 indexList :: Eq c => (a -> c) -> (b -> c) -> [a] -> [b] -> [Int]
