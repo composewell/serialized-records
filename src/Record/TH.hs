@@ -136,10 +136,20 @@ stmtToValue rsmList =
 
     where
 
+    flattenNullableExp i expr | i <= 0 = expr
+    flattenNullableExp i expr =
+        flattenNullableExp (i - 1) [|flattenNullable $(expr)|]
+
+    respectingNullability re =
+        flattenNullableExp
+            (reNullabilityLevel re - 1)
+            [|toValue $(varE (prefixName "a_" (reKey re)))|]
+
     makeLetDec re =
         valD
             (varP (prefixName "v_" (reKey re)))
-            (normalB [|toValue $(varE (prefixName "a_" (reKey re)))|]) []
+            (normalB (respectingNullability re))
+            []
 
 expSize :: Int -> [RecordElement] -> Q Exp
 expSize headerLen rsmList =
@@ -203,25 +213,52 @@ stmtHeaderSerialzation ns (RecordStaticMeta rsmList) =
 
 stmtBodySerialization :: GlobalNameSpace -> RecordStaticMeta -> [Q Stmt]
 stmtBodySerialization ns (RecordStaticMeta rsmList) =
-    let valueNames = map (prefixName "v_" . reKey) rsmList
-        nNames = map makeN [0..]
-        valNamesAndOffsets = zip valueNames nNames
+    let nNames = map makeN [0..]
+        valNamesAndOffsets = zip rsmList nNames
      in concatMap makeBindS $ zip [iOffset..] valNamesAndOffsets
 
     where
 
-    makeBindS (i, (valName, offName)) =
-        [ noBindS
-              [|void
-                 $ recPrimSerializeAt
-                       $(varE offName)
-                       $(varE arrName)
-                       (i_i32 $(varE (makeI i)) :: Int32)|]
-        , bindS
-              (varP (makeI (i + 1)))
-              [|recPrimSerializeAt
-                 $(varE (makeI i)) $(varE arrName) $(varE valName)|]
-        ]
+    makeBindS (i, (val, offName)) =
+     let vPrefixedName = (prefixName "v_" (reKey val))
+     in if reNullabilityLevel val == 0
+        then
+            [ noBindS
+                  [|void
+                     $ recPrimSerializeAt
+                           $(varE offName)
+                           $(varE arrName)
+                           (i_i32 $(varE (makeI i)) :: Int32)|]
+            , bindS
+                  (varP (makeI (i + 1)))
+                  [|recPrimSerializeAt
+                     $(varE (makeI i))
+                     $(varE arrName)
+                     $(varE vPrefixedName)|]
+            ]
+        else
+            [ bindS
+                (varP (makeI (i + 1)))
+                [|case $(varE vPrefixedName) of
+                      Nothing -> do
+                          void
+                              $ recPrimSerializeAt
+                                    $(varE offName)
+                                    $(varE arrName)
+                                    (0 :: Int32)
+                          pure $(varE (makeI i))
+                      Just valToSerialize -> do
+                          void
+                              $ recPrimSerializeAt
+                                    $(varE offName)
+                                    $(varE arrName)
+                                    (i_i32 $(varE (makeI i)) :: Int32)
+                          recPrimSerializeAt
+                              $(varE (makeI i))
+                              $(varE arrName)
+                              valToSerialize
+                 |]
+            ]
 
     arrName = nsArr ns
     numFields = length rsmList
