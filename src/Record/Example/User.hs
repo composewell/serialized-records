@@ -6,7 +6,7 @@ import Record.Example.Address
 import Record.Types
 import Record.TH
 
-#define DERIVE_TH(x) $(deriveSerializableInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
 
 --------------------------------------------------------------------------------
 -- User

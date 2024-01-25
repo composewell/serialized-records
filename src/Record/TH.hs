@@ -67,6 +67,11 @@ getConAndRecFields recTypeName = do
 getRecFields :: Name -> Q [(Name, Type)]
 getRecFields = fmap snd . getConAndRecFields
 
+repeatedApply :: Int -> Q Exp -> Q Exp -> Q Exp
+repeatedApply i _ expr | i <= 0 = expr
+repeatedApply i aExpr expr =
+    repeatedApply (i - 1) aExpr [|$(aExpr) $(expr)|]
+
 expRecordMeta :: Name -> Q Exp
 expRecordMeta recTypeName = do
     keyList <- fmap (zip [0..]) (getRecFields recTypeName)
@@ -136,13 +141,10 @@ stmtToValue rsmList =
 
     where
 
-    flattenNullableExp i expr | i <= 0 = expr
-    flattenNullableExp i expr =
-        flattenNullableExp (i - 1) [|flattenNullable $(expr)|]
-
     respectingNullability re =
-        flattenNullableExp
+        repeatedApply
             (reNullabilityLevel re - 1)
+            [|flattenNullable|]
             [|toValue $(varE (prefixName "a_" (reKey re)))|]
 
     makeLetDec re =
@@ -341,11 +343,6 @@ decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) recTypeName =
 decsIsRecordableInstance  :: Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
 decsIsRecordableInstance a b c = fmap (:[]) $ decIsRecordableInstance a b c
 
-makeJustExp :: Int -> Q Exp -> Q Exp
-makeJustExp i expr | i <= 0 = expr
-makeJustExp i expr =
-    makeJustExp (i - 1) [|Just $(expr)|]
-
 expGetFieldTrusted ::
     (Int, Int, Bool) -> RecordElement -> ((Int, Int, Bool), Q Exp)
 expGetFieldTrusted (preKeyOffset, preValueOffset, isPrevStatic) re = do
@@ -371,8 +368,9 @@ expGetFieldTrusted (preKeyOffset, preValueOffset, isPrevStatic) re = do
                         Nothing -> Nothing
                         Just res ->
                             let $(varP (mkName "tmp")) = res
-                             in $(makeJustExp
+                             in $(repeatedApply
                                     (reNullabilityLevel re)
+                                    [|Just|]
                                     (varE (mkName "tmp")))
                   |]
                 )
@@ -401,8 +399,9 @@ expGetFieldUntrusted headerLen re =
               Nothing -> Nothing
               Just res ->
                   let $(varP (mkName "tmp")) = res
-                   in $(makeJustExp
+                   in $(repeatedApply
                           (reNullabilityLevel re)
+                          [|Just|]
                           (varE (mkName "tmp")))
         |]
 
@@ -467,9 +466,9 @@ decsHasField (RecordStaticMeta rsmList) recTypeName = do
                 decHasField headerLen recTypeName offsets x
          in go conTypeName offsets1 xs (qdec:ys)
 
-deriveSerializableInstances ::
+deriveSerializedRecInstances ::
     Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
-deriveSerializableInstances typeHashArr rsm recTypeName = do
+deriveSerializedRecInstances typeHashArr rsm recTypeName = do
     recInst <- decIsRecordableInstance typeHashArr rsm recTypeName
     hasFldInsts <- decsHasField rsm recTypeName
     pure $ recInst:hasFldInsts

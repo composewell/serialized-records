@@ -4,7 +4,7 @@ module Record.Example.Address where
 
 import Record.TH
 
-#define DERIVE_TH(x) $(deriveSerializableInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
 
 --------------------------------------------------------------------------------
 -- Address
