@@ -23,6 +23,7 @@ import Streamly.Internal.Data.MutByteArray
 data RecordElement =
     RecordElement
         { reKey :: String
+        , reOrigIndex :: Int
         , reStaticSize :: Maybe Int
         , reNullabilityLevel :: Int
         }
@@ -68,19 +69,19 @@ getRecFields = fmap snd . getConAndRecFields
 
 expRecordMeta :: Name -> Q Exp
 expRecordMeta recTypeName = do
-    keyList <- getRecFields recTypeName
+    keyList <- fmap (zip [0..]) (getRecFields recTypeName)
     let recElemList = map fieldToRE keyList
     res <- [|RecordStaticMeta (sortRecElemList $(listE recElemList))|]
     pure res
 
     where
 
-    fieldToRE :: (Name, Type) -> Q Exp
-    fieldToRE (x, typ) = do
+    fieldToRE :: (Int, (Name, Type)) -> Q Exp
+    fieldToRE (i, (x, typ)) = do
         let proxyType = [t|Proxy $(pure typ)|]
         let xStr = nameBase x
         res <-
-            [|RecordElement xStr
+            [|RecordElement xStr i
                (recPrimStaticSize (toValueProxy (Proxy :: $(proxyType))))
                (nullabilityLevel (toValueProxy (Proxy :: $(proxyType))))
             |]
@@ -91,9 +92,9 @@ sortRecElemList = sortBy sorterFunc
 
     where
 
-    sorterFunc (RecordElement _ Nothing _) (RecordElement _ (Just _) _) = GT
-    sorterFunc (RecordElement _ (Just _) _) (RecordElement _ Nothing _) = LT
-    sorterFunc (RecordElement a _ _) (RecordElement b _ _) = compare a b
+    sorterFunc (RecordElement _ _ Nothing _) (RecordElement _ _ (Just _) _) = GT
+    sorterFunc (RecordElement _ _ (Just _) _) (RecordElement _ _ Nothing _) = LT
+    sorterFunc (RecordElement a _ _ _) (RecordElement b _ _ _) = compare a b
 
 indexList :: Eq c => (a -> c) -> (b -> c) -> [a] -> [b] -> [Int]
 indexList mapperA mapperB listA listB =
@@ -126,31 +127,33 @@ expTypeHash (RecordStaticMeta rsmList) recTypeName = do
         [|encodeSimpleString n
            <> recPrimHash (toValueProxy (Proxy :: Proxy $(pure t)))|]
 
-makeV :: Int -> Name
-makeV i = mkName $ "v" ++ show i
+prefixName :: String -> String -> Name
+prefixName p v = mkName $ p ++ v
 
-stmtToValue :: Int -> Q Stmt
-stmtToValue numFields =
-    letS $ map makeLetDec [0..(numFields - 1)]
+stmtToValue :: [RecordElement] -> Q Stmt
+stmtToValue rsmList =
+    letS $ map makeLetDec rsmList
 
     where
 
-    makeLetDec i =
-        valD (varP (makeV i)) (normalB [|toValue $(varE (mkFieldName i))|]) []
+    makeLetDec re =
+        valD
+            (varP (prefixName "v_" (reKey re)))
+            (normalB [|toValue $(varE (prefixName "a_" (reKey re)))|]) []
 
-expSize :: Int -> Int -> Q Exp
-expSize numFields headerLen =
+expSize :: Int -> [RecordElement] -> Q Exp
+expSize headerLen rsmList =
     foldl'
         (\b a -> [|recPrimAddSizeTo $(b) $(a)|])
         [|headerLen
               + lenVersion + lenMessageLen + lenTypeHash + lenHeaderLen|]
-        (map (varE . makeV) [0..(numFields - 1)])
+        (map (varE . prefixName "v_" . reKey) rsmList)
 
 stmtPreHeaderSerialization
     :: GlobalNameSpace -> RecordStaticMeta -> Name -> [Q Stmt]
 stmtPreHeaderSerialization ns (RecordStaticMeta rsmList) recTypeName =
-    [ stmtToValue (length rsmList)
-    , letS [valD (varP sizeName) (normalB (expSize numFields headerLen)) []]
+    [ stmtToValue rsmList
+    , letS [valD (varP sizeName) (normalB (expSize headerLen rsmList)) []]
     , bindS (varP arrName) [|Serialize.new size|]
     , letS [valD (varP (makeI 0)) (normalB [|0|]) []]
     , bindS
@@ -175,7 +178,6 @@ stmtPreHeaderSerialization ns (RecordStaticMeta rsmList) recTypeName =
 
     sizeName = nsSize ns
     arrName = nsArr ns
-    numFields = length rsmList
     headerLen = getHeaderLength rsmList
 
 stmtHeaderSerialzation :: GlobalNameSpace -> RecordStaticMeta -> [Q Stmt]
@@ -199,11 +201,9 @@ stmtHeaderSerialzation ns (RecordStaticMeta rsmList) =
                $(stringE keyStr)
             |]
 
-stmtBodySerialization
-    :: GlobalNameSpace -> [(Name, Type)] -> RecordStaticMeta -> [Q Stmt]
-stmtBodySerialization ns conFields (RecordStaticMeta rsmList) =
-    let indexedFields = indexList reKey (nameBase . fst) rsmList conFields
-        valueNames = map (makeV . fst) $ sortOn snd $ (zip [0..] indexedFields)
+stmtBodySerialization :: GlobalNameSpace -> RecordStaticMeta -> [Q Stmt]
+stmtBodySerialization ns (RecordStaticMeta rsmList) =
+    let valueNames = map (prefixName "v_" . reKey) rsmList
         nNames = map makeN [0..]
         valNamesAndOffsets = zip valueNames nNames
      in concatMap makeBindS $ zip [iOffset..] valNamesAndOffsets
@@ -227,13 +227,12 @@ stmtBodySerialization ns conFields (RecordStaticMeta rsmList) =
     numFields = length rsmList
     iOffset = 4 + numFields
 
-stmtRecordCreation
-    :: GlobalNameSpace -> [(Name, Type)] -> RecordStaticMeta -> Name -> [Q Stmt]
-stmtRecordCreation ns reified rsm@(RecordStaticMeta rsmList) recTypeName =
+stmtRecordCreation :: GlobalNameSpace -> RecordStaticMeta -> Name -> [Q Stmt]
+stmtRecordCreation ns rsm@(RecordStaticMeta rsmList) recTypeName =
     concat
         [ stmtPreHeaderSerialization ns rsm recTypeName
         , stmtHeaderSerialzation ns rsm
-        , stmtBodySerialization ns reified rsm
+        , stmtBodySerialization ns rsm
         , [noBindS
                [|pure $ Record True $ Array arr 0 $(varE (makeI lastIOffset))|]]
         ]
@@ -244,22 +243,23 @@ stmtRecordCreation ns reified rsm@(RecordStaticMeta rsmList) recTypeName =
     lastIOffset = numFields * 2 + 4
 
 expCreateRecord :: RecordStaticMeta -> Name -> Q Exp
-expCreateRecord rsm recTypeName = do
+expCreateRecord rsm@(RecordStaticMeta rsmList) recTypeName = do
     let argName = nsArg defaultNameSpace
-    (conName, conFields) <- getConAndRecFields recTypeName
-    let numFields = length conFields
+    (conName, _) <- getConAndRecFields recTypeName
     caseE
         (varE argName)
-        [matchConstructor
-             conName
-             numFields
-             [|unsafePerformIO $(expDoRecordCreation conFields)|]
+        [match
+             (conP conName
+                  (map (varP . prefixName "a_" . reKey)
+                  (sortOn reOrigIndex rsmList)))
+             (normalB [|unsafePerformIO $(expDoRecordCreation)|])
+             []
         ]
 
     where
 
-    expDoRecordCreation conFields = doE $
-        stmtRecordCreation defaultNameSpace conFields rsm recTypeName
+    expDoRecordCreation =
+        doE $ stmtRecordCreation defaultNameSpace rsm recTypeName
 
 
 decIsRecordableInstance :: Array Word8 -> RecordStaticMeta -> Name -> Q Dec
