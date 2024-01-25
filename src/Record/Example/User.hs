@@ -9,7 +9,7 @@ import Record.TH
 import Data.Maybe (fromJust)
 import Data.Proxy (Proxy(..))
 
-#define DERIVE_TH(x) $(decsIsRecordableInstance $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializableInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
 
 --------------------------------------------------------------------------------
 -- User
@@ -91,7 +91,6 @@ instance IsRecordable User where
         void $ recPrimSerializeAt i13 arr (i_i32 i18 :: Int32)
         i19 <- recPrimSerializeAt i18 arr name_
         pure $ Record True $ Array arr 0 i19
--}
 
 instance HasField (Proxy "age") (Record User) Int where
 
@@ -127,3 +126,4 @@ instance HasField (Proxy "address") (Record User) (Record Address) where
     getField _ (Record True arr) = getFieldTrustedStatic ((offsetMessageBody 59) + 17) arr
     getField _ (Record False arr) =
         fromJust $ getFieldUntrusted 59 (encodeSimpleString "address") arr
+-}

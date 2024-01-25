@@ -8,7 +8,7 @@ import Record.TH
 import Data.Maybe (fromJust)
 import Data.Proxy (Proxy(..))
 
-#define DERIVE_TH(x) $(decsIsRecordableInstance $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializableInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
 
 --------------------------------------------------------------------------------
 -- Address
@@ -68,7 +68,6 @@ instance IsRecordable Address where
                 void $ recPrimSerializeAt i7 arr (i_i32 i9 :: Int32)
                 recPrimSerializeAt i9 arr val
         pure $ Record True $ Array arr 0 i10
--}
 
 instance HasField (Proxy "zipCode") (Record Address) Int where
 
@@ -89,3 +88,4 @@ instance HasField (Proxy "country") (Record Address) (Maybe (Maybe (Maybe String
         case getFieldUntrusted 26 (encodeSimpleString "country") arr of
             Nothing -> Nothing
             Just res -> Just $ Just $ Just res
+-}

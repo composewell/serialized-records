@@ -7,7 +7,7 @@ module Record.TH where
 import Control.Monad (void)
 import Data.Int (Int16, Int32)
 import Data.Proxy (Proxy(..))
-import Data.List (sortBy, findIndex, foldl1', foldl', sortOn)
+import Data.List (sortBy, findIndex, find, foldl1', foldl', sortOn)
 import Data.Maybe (fromJust)
 import Data.Word (Word8)
 import Streamly.Internal.Data.Array (Array(..))
@@ -340,3 +340,136 @@ decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) recTypeName =
 
 decsIsRecordableInstance  :: Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
 decsIsRecordableInstance a b c = fmap (:[]) $ decIsRecordableInstance a b c
+
+makeJustExp :: Int -> Q Exp -> Q Exp
+makeJustExp i expr | i <= 0 = expr
+makeJustExp i expr =
+    makeJustExp (i - 1) [|Just $(expr)|]
+
+expGetFieldTrusted ::
+    (Int, Int, Bool) -> RecordElement -> ((Int, Int, Bool), Q Exp)
+expGetFieldTrusted (preKeyOffset, preValueOffset, isPrevStatic) re = do
+    case reStaticSize re of
+        Just valSize ->
+            ( (keyPos + 4, preValueOffset + valSize, True)
+            , [|getFieldTrustedStatic preValueOffset $(varE arrName)|]
+            )
+        Nothing ->
+            if reNullabilityLevel re == 0
+            then if isPrevStatic
+                 then
+                     ( (keyPos + 4, undefined, False)
+                     , [|getFieldTrustedStatic preValueOffset $(varE arrName)|]
+                     )
+                 else
+                     ( (keyPos + 4, undefined, False)
+                     , [|getFieldTrustedDynamic keyPos $(varE arrName)|]
+                     )
+            else
+                ( (keyPos + 4, undefined, False)
+                , [|case getFieldTrustedNullable keyPos $(varE arrName) of
+                        Nothing -> Nothing
+                        Just res ->
+                            let $(varP (mkName "tmp")) = res
+                             in $(makeJustExp
+                                    (reNullabilityLevel re)
+                                    (varE (mkName "tmp")))
+                  |]
+                )
+
+    where
+
+    keyPos = preKeyOffset + length (reKey re) + 2
+    arrName = nsArr defaultNameSpace
+
+expGetFieldUntrusted :: Int -> RecordElement -> Q Exp
+expGetFieldUntrusted headerLen re =
+    if reNullabilityLevel re == 0
+    then
+        [|fromJust
+              $ getFieldUntrusted
+                    headerLen
+                    (encodeSimpleString $(litE (stringL (reKey re))))
+                    $(varE arrName)
+        |]
+    else
+        [|case
+             getFieldUntrusted
+                 headerLen
+                 (encodeSimpleString $(litE (stringL (reKey re))))
+                 $(varE arrName) of
+              Nothing -> Nothing
+              Just res ->
+                  let $(varP (mkName "tmp")) = res
+                   in $(makeJustExp
+                          (reNullabilityLevel re)
+                          (varE (mkName "tmp")))
+        |]
+
+    where
+    arrName = nsArr defaultNameSpace
+
+decHasField ::
+    Int -> Name -> Name -> (Int, Int, Bool) -> (RecordElement, Type) -> ((Int, Int, Bool), Q Dec)
+decHasField headerLen recTypeName conTypeName offsets (re, typ) =
+    let (offsets1, expGFT) = expGetFieldTrusted offsets re
+     in (offsets1, decHF expGFT)
+
+    where
+
+    arrName = nsArr defaultNameSpace
+    decHF expGFT =
+        instanceD
+            (pure [])
+            [t|HasField
+                  (Proxy $(litT (strTyLit (reKey re))))
+                  (Record $(conT recTypeName))
+                  $(pure typ)
+            |]
+            [ funD
+                  'getField
+                  [ clause
+                        [ wildP
+                        , conP 'Record [conP 'True [], varP arrName]
+                        ]
+                        (normalB expGFT)
+                        []
+                  , clause
+                        [ wildP
+                        , conP 'Record [conP 'False [], varP arrName]
+                        ]
+                        (normalB (expGetFieldUntrusted headerLen re))
+                        []
+                  ]
+            ]
+
+decsHasField :: RecordStaticMeta -> Name -> Q [Dec]
+decsHasField (RecordStaticMeta rsmList) recTypeName = do
+    (conTypeName, conFields) <- getConAndRecFields recTypeName
+    let rElements =
+            map
+                (\x -> ( x
+                       , snd
+                             $ fromJust
+                             $ find
+                                   (\(y, _) -> nameBase y == reKey x)
+                                   conFields))
+                rsmList
+    sequence $ go conTypeName initialOffsets rElements []
+
+    where
+
+    headerLen = getHeaderLength rsmList
+    initialOffsets = (offsetHeaderBody, offsetMessageBody headerLen, True)
+    go _ _ [] ys = ys
+    go conTypeName offsets (x:xs) ys =
+        let (offsets1, qdec) =
+                decHasField headerLen recTypeName conTypeName offsets x
+         in go conTypeName offsets1 xs (qdec:ys)
+
+deriveSerializableInstances ::
+    Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
+deriveSerializableInstances typeHashArr rsm recTypeName = do
+    recInst <- decIsRecordableInstance typeHashArr rsm recTypeName
+    hasFldInsts <- decsHasField rsm recTypeName
+    pure $ recInst:hasFldInsts
