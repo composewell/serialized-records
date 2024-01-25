@@ -271,7 +271,7 @@ decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) recTypeName =
               'typeHash
               [ clause
                     [wildP]
-                    (normalB [|Array.fromList (take 32 ($(expH) :: [Word8]))|])
+                    (normalB [|Array.fromList ($(expH) :: [Word8])|])
                     []
               ]
         , funD
@@ -296,7 +296,10 @@ decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) recTypeName =
     mBodyLen = fmap sum $ sequence $ map reStaticSize rsmList
     constSizeOverhead = offsetMessageBody headerLen
     staticSize = fmap (+constSizeOverhead) mBodyLen
-    expH = listE $ map (litE . integerL . fromIntegral) $ Array.toList typeHashArr
+    expH =
+        listE
+            $ map (litE . integerL . fromIntegral)
+            $ take 32 (Array.toList typeHashArr ++ repeat 0)
 
 decsIsRecordableInstance  :: Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
 decsIsRecordableInstance a b c = fmap (:[]) $ decIsRecordableInstance a b c
