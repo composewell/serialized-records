@@ -11,6 +11,7 @@ import Data.List (sortBy, findIndex, foldl1', foldl', sortOn)
 import Data.Maybe (fromJust)
 import Data.Word (Word8)
 import Streamly.Internal.Data.Array (Array(..))
+import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Internal.Data.MutByteArray as Serialize
@@ -146,8 +147,8 @@ expSize numFields headerLen =
         (map (varE . makeV) [0..(numFields - 1)])
 
 stmtPreHeaderSerialization
-    :: GlobalNameSpace -> Array Word8 -> RecordStaticMeta -> [Q Stmt]
-stmtPreHeaderSerialization ns typeHashArr (RecordStaticMeta rsmList) =
+    :: GlobalNameSpace -> RecordStaticMeta -> Name -> [Q Stmt]
+stmtPreHeaderSerialization ns (RecordStaticMeta rsmList) recTypeName =
     [ stmtToValue (length rsmList)
     , letS [valD (varP sizeName) (normalB (expSize numFields headerLen)) []]
     , bindS (varP arrName) [|Serialize.new size|]
@@ -163,7 +164,7 @@ stmtPreHeaderSerialization ns typeHashArr (RecordStaticMeta rsmList) =
           (varP (makeI 3))
           [|unsafePutCompleteSlice
              $(varE (makeI 2)) $(varE arrName)
-             (Array.fromList (take 32 ($(arrExp) :: [Word8])))|]
+             (typeHash (Proxy :: $([t|Proxy $(conT recTypeName)|])))|]
     , bindS
           (varP (makeI 4))
           [|recPrimSerializeAt
@@ -174,8 +175,6 @@ stmtPreHeaderSerialization ns typeHashArr (RecordStaticMeta rsmList) =
 
     sizeName = nsSize ns
     arrName = nsArr ns
-    arrExp =
-        listE $ map (litE . integerL . fromIntegral) $ Array.toList typeHashArr
     numFields = length rsmList
     headerLen = getHeaderLength rsmList
 
@@ -229,10 +228,10 @@ stmtBodySerialization ns conFields (RecordStaticMeta rsmList) =
     iOffset = 4 + numFields
 
 stmtRecordCreation
-    :: GlobalNameSpace -> [(Name, Type)] -> Array Word8 -> RecordStaticMeta -> [Q Stmt]
-stmtRecordCreation ns reified typeHashArr rsm@(RecordStaticMeta rsmList) =
+    :: GlobalNameSpace -> [(Name, Type)] -> RecordStaticMeta -> Name -> [Q Stmt]
+stmtRecordCreation ns reified rsm@(RecordStaticMeta rsmList) recTypeName =
     concat
-        [ stmtPreHeaderSerialization ns typeHashArr rsm
+        [ stmtPreHeaderSerialization ns rsm recTypeName
         , stmtHeaderSerialzation ns rsm
         , stmtBodySerialization ns reified rsm
         , [noBindS
@@ -244,8 +243,8 @@ stmtRecordCreation ns reified typeHashArr rsm@(RecordStaticMeta rsmList) =
     numFields = length rsmList
     lastIOffset = numFields * 2 + 4
 
-expCreateRecord :: Array Word8 -> RecordStaticMeta -> Name -> Q Exp
-expCreateRecord typeHashArr rsm recTypeName = do
+expCreateRecord :: RecordStaticMeta -> Name -> Q Exp
+expCreateRecord rsm recTypeName = do
     let argName = nsArg defaultNameSpace
     (conName, conFields) <- getConAndRecFields recTypeName
     let numFields = length conFields
@@ -254,4 +253,50 @@ expCreateRecord typeHashArr rsm recTypeName = do
         [matchConstructor
              conName
              numFields
-             (doE (stmtRecordCreation defaultNameSpace conFields typeHashArr rsm))]
+             [|unsafePerformIO $(expDoRecordCreation conFields)|]
+        ]
+
+    where
+
+    expDoRecordCreation conFields = doE $
+        stmtRecordCreation defaultNameSpace conFields rsm recTypeName
+
+
+decIsRecordableInstance :: Array Word8 -> RecordStaticMeta -> Name -> Q Dec
+decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) recTypeName =
+    instanceD
+        (pure [])
+        [t|IsRecordable $(conT recTypeName)|]
+        [ funD
+              'typeHash
+              [ clause
+                    [wildP]
+                    (normalB [|Array.fromList (take 32 ($(expH) :: [Word8]))|])
+                    []
+              ]
+        , funD
+              'recStaticSize
+              [ clause
+                    [wildP]
+                    (normalB [|staticSize|])
+                    []
+              ]
+        , funD
+              'createRecord
+              [ clause
+                    [varP (nsArg defaultNameSpace)]
+                    (normalB (expCreateRecord rsm recTypeName))
+                    []
+              ]
+        ]
+
+    where
+
+    headerLen = getHeaderLength rsmList
+    mBodyLen = fmap sum $ sequence $ map reStaticSize rsmList
+    constSizeOverhead = offsetMessageBody headerLen
+    staticSize = fmap (+constSizeOverhead) mBodyLen
+    expH = listE $ map (litE . integerL . fromIntegral) $ Array.toList typeHashArr
+
+decsIsRecordableInstance  :: Array Word8 -> RecordStaticMeta -> Name -> Q [Dec]
+decsIsRecordableInstance a b c = fmap (:[]) $ decIsRecordableInstance a b c
