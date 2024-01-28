@@ -6,21 +6,21 @@ import Record.Example.Address
 import Record.Types
 import Record.TH
 
-#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta x) x) $(expRecordMeta x) x)
 
 --------------------------------------------------------------------------------
 -- User
 --------------------------------------------------------------------------------
 
-data User = User
-    { name :: String
-    , age :: Int
-    , height :: Double
-    , isMarried :: Bool
-    , address :: Record Address
+data User a b c d e = User
+    { name :: a -- String
+    , age :: b -- Int
+    , height :: c -- Double
+    , isMarried :: d -- Bool
+    , address :: e -- Record Address
     }
 
-DERIVE_TH(User)
+DERIVE_TH([d|instance IsRecordable (User String Int Double Bool (Record Address))|])
 
 {-
 -- TODO: order is decided by the TH combinators

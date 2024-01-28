@@ -20,7 +20,7 @@ addressRecord =
         , country = Just (Just (Just "India"))
         }
 
-hsUser :: User
+hsUser :: User String Int Double Bool (Record Address)
 hsUser =
     User
         { name = "Adithya"
@@ -30,7 +30,7 @@ hsUser =
         , address = addressRecord
         }
 
-userRecord :: Record User
+userRecord :: Record (User String Int Double Bool (Record Address))
 userRecord = createRecord hsUser
 
 main :: IO ()

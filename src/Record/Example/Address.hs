@@ -3,8 +3,9 @@
 module Record.Example.Address where
 
 import Record.TH
+import Record.Types
 
-#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta ''x) ''x) $(expRecordMeta ''x) ''x)
+#define DERIVE_TH(x) $(deriveSerializedRecInstances $(expTypeHash $(expRecordMeta x) x) $(expRecordMeta x) x)
 
 --------------------------------------------------------------------------------
 -- Address
@@ -15,7 +16,7 @@ data Address = Address
     , country :: Maybe (Maybe (Maybe String))
     }
 
-DERIVE_TH(Address)
+DERIVE_TH([d|instance IsRecordable Address|])
 
 {-
 -- This should be derived via template-haskell helpers
