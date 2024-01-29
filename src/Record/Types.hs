@@ -92,20 +92,8 @@ data Record a = Record Bool (Array Word8) deriving (Show)
 
 newtype Utf8 = Utf8 (Array Word8)
 
-newtype R a = R a
-
-{-# INLINE unR #-}
-unR :: R a -> a
-unR (R a) = a
-
 breakTrust :: Record a -> Record a
 breakTrust (Record _ arr) = Record False arr
-
-coerceRecordTo :: Record a -> Record (R a)
-coerceRecordTo (Record t arr) = Record t arr
-
-coerceRecordFrom :: Record (R a) -> Record a
-coerceRecordFrom (Record t arr) = Record t arr
 
 -- Should we use MutByteArray here?
 class IsRecordPrimitive a where
@@ -145,12 +133,6 @@ instance forall a. NullableMeta a => NullableMeta (Maybe a) where
 instance {-# OVERLAPPABLE #-} NullableMeta a where
     isNullable _ = False
     nullabilityLevel _ = 0
-
-instance IsRecordable a => IsRecordable (R a) where
-    typeHash _ = typeHash (Proxy :: Proxy a)
-    recStaticSize _ = recStaticSize (Proxy :: Proxy a)
-    createRecord (R a) = coerceRecordTo $ createRecord a
-    parseRecord a = R (parseRecord (coerceRecordFrom a))
 
 instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
     recPrimHash _ = typeHash (Proxy :: Proxy a)
@@ -230,10 +212,6 @@ instance IsRecordPrimitive a => IsRecordPrimitive (Maybe a) where
     recPrimAddSizeTo i (Just a) = recPrimAddSizeTo i a
     recPrimSerializeAt _ _ _ = undefined
     recPrimDeserializeAt _ _ _ = undefined
-
-instance IsRecordable a => ValueMapper (R a) (Record (R a)) where
-    toValue = createRecord
-    fromValue = parseRecord
 
 instance ValueMapper a b => ValueMapper (Maybe a) (Maybe b) where
     toValue Nothing = Nothing
