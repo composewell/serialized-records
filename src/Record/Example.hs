@@ -11,25 +11,28 @@ import Record.Example.User
 -- Example
 --------------------------------------------------------------------------------
 
-addressRecord :: Record Address
-addressRecord =
-    createRecord $ Address
+addressR :: Address
+addressR =
+    Address
         { zipCode = 123456
         , country = Just (Just (Just "India"))
         }
 
-hsUser :: User String Int Double Bool (Record Address)
-hsUser =
+addressRecord :: Record Address
+addressRecord = createRecord addressR
+
+userR :: User String Int Double Bool (R Address)
+userR =
     User
         { name = "Adithya"
         , age = 26
         , height = 183.5
         , isMarried = True
-        , address = addressRecord
+        , address = R addressR
         }
 
-userRecord :: Record (User String Int Double Bool (Record Address))
-userRecord = createRecord hsUser
+userRecord :: Record (User String Int Double Bool (R Address))
+userRecord = createRecord userR
 
 main :: IO ()
 main = do
@@ -38,9 +41,11 @@ main = do
         parsedAddress = parseRecord addressRecord
         parsedAddressU = parseRecord $ breakTrust $ addressRecord
         parsedUserU = parseRecord $ breakTrust $ userRecord
-        parsedAddressI = parseRecord $ address parsedUser
-        parsedAddressIU =
-            parseRecord $ breakTrust $ address $ parsedUserU
+        parsedAddressI = unR $ address parsedUser
+        parsedAddressIU = unR $ address $ parsedUserU
+
+    print $ zipCode parsedAddressI
+    print $ country parsedAddressI
 
     print $ zipCode parsedAddress
     print $ country parsedAddress
@@ -57,9 +62,6 @@ main = do
     print $ age parsedUserU
     print $ height parsedUserU
     print $ isMarried parsedUserU
-
-    print $ zipCode parsedAddressI
-    print $ country parsedAddressI
 
     print $ zipCode parsedAddressIU
     print $ country parsedAddressIU
