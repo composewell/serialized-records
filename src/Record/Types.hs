@@ -261,6 +261,10 @@ readRecord :: IsRecordable a => Array Word8 -> Record a
 readRecord (Array arr start end) =
     unsafeInlineIO $ fmap snd $ recPrimDeserializeAt start arr end
 
+{-# INLINE writeRecord #-}
+writeRecord :: Record a -> Array Word8
+writeRecord (Record _ arr) = arr
+
 {-# INLINE touch #-}
 touch :: Array a -> IO ()
 touch (Array (Serialize.MutByteArray contents) _ _) =
