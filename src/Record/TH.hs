@@ -300,6 +300,14 @@ expCreateRecord rsm@(RecordStaticMeta rsmList) headTy cons = do
     expDoRecordCreation =
         doE $ stmtRecordCreation defaultNameSpace rsm headTy
 
+expParseRecord :: RecordStaticMeta -> [DataCon] -> Q Exp
+expParseRecord rsm cons = do
+    let argName = nsArg defaultNameSpace
+        arrName = nsArr defaultNameSpace
+    [|case $(varE argName) of
+          Record True $(varP arrName) -> $(expRecFieldsTrusted rsm cons)
+          Record False $(varP arrName) -> $(expRecFieldsUntrusted rsm cons)
+     |]
 
 decIsRecordableInstance ::
     Array Word8 -> RecordStaticMeta -> Type -> [DataCon] -> Q Dec
@@ -326,6 +334,13 @@ decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) headTy cons =
               [ clause
                     [varP (nsArg defaultNameSpace)]
                     (normalB (expCreateRecord rsm headTy cons))
+                    []
+              ]
+        , funD
+              'parseRecord
+              [ clause
+                    [varP (nsArg defaultNameSpace)]
+                    (normalB (expParseRecord rsm cons))
                     []
               ]
         ]
@@ -410,6 +425,54 @@ expGetFieldUntrusted headerLen re =
     where
     arrName = nsArr defaultNameSpace
 
+expRecFieldTrusted ::
+    (Int, Int, Bool) -> (RecordElement, Name) -> ((Int, Int, Bool), Q (Name, Exp))
+expRecFieldTrusted offsets (re, keyName) =
+    let (offsets1, expGFT) = expGetFieldTrusted offsets re
+     in (offsets1, (keyName,) <$> expGFT)
+
+expRecFieldsTrusted :: RecordStaticMeta -> [DataCon] -> Q Exp
+expRecFieldsTrusted (RecordStaticMeta rsmList) cons = do
+    (conTypeName, conFields) <- getConAndRecFields cons
+    let rElements =
+            map
+                (\x -> ( x
+                       , fst
+                             $ fromJust
+                             $ find
+                                   (\(y, _) -> nameBase y == reKey x)
+                                   conFields))
+                rsmList
+    recConE conTypeName $ go initialOffsets rElements []
+
+    where
+
+    headerLen = getHeaderLength rsmList
+    initialOffsets = (offsetHeaderBody, offsetMessageBody headerLen, True)
+    go _ [] ys = ys
+    go offsets (x:xs) ys =
+        let (offsets1, recFld) = expRecFieldTrusted offsets x
+         in go offsets1 xs (recFld:ys)
+
+expRecFieldsUntrusted :: RecordStaticMeta -> [DataCon] -> Q Exp
+expRecFieldsUntrusted (RecordStaticMeta rsmList) cons = do
+    (conTypeName, conFields) <- getConAndRecFields cons
+    let rElements =
+            map
+                (\x -> ( x
+                       , fst
+                             $ fromJust
+                             $ find
+                                   (\(y, _) -> nameBase y == reKey x)
+                                   conFields))
+                rsmList
+    recConE conTypeName
+        $ map (\(re, n) -> (n,) <$> expGetFieldUntrusted headerLen re) rElements
+
+    where
+
+    headerLen = getHeaderLength rsmList
+
 decHasField ::
     Int -> Type -> (Int, Int, Bool) -> (RecordElement, Type) -> ((Int, Int, Bool), Q Dec)
 decHasField headerLen headTy offsets (re, typ) =
@@ -472,8 +535,9 @@ deriveSerializedRecInstances ::
     Array Word8 -> RecordStaticMeta -> Q [Dec] -> Q [Dec]
 deriveSerializedRecInstances typeHashArr rsm decs = withReifiedApps decs $ \_ _ headTy cons -> do
     recInst <- decIsRecordableInstance typeHashArr rsm headTy cons
-    hasFldInsts <- decsHasField rsm headTy cons
-    pure $ recInst:hasFldInsts
+    -- hasFldInsts <- decsHasField rsm headTy cons
+    -- pure $ recInst:hasFldInsts
+    pure [recInst]
 
 withReifiedApps ::
     Q [Dec] -> (Maybe Overlap -> Cxt -> Type -> [DataCon] -> Q b) -> Q b

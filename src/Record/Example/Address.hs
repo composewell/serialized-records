@@ -14,7 +14,7 @@ import Record.Types
 data Address = Address
     { zipCode :: Int
     , country :: Maybe (Maybe (Maybe String))
-    }
+    } deriving (Show)
 
 DERIVE_TH([d|instance IsRecordable Address|])
 

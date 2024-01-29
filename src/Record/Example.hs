@@ -4,8 +4,6 @@ module Record.Example where
 
 import Record.Types
 
-import Data.Proxy (Proxy(..))
-
 import Record.Example.Address
 import Record.Example.User
 
@@ -35,36 +33,33 @@ userRecord = createRecord hsUser
 
 main :: IO ()
 main = do
-    print $ getField @(Proxy "zipCode") Proxy addressRecord
-    print $ getField @(Proxy "country") Proxy addressRecord
 
-    print $ getField @(Proxy "name") Proxy userRecord
-    print $ getField @(Proxy "age") Proxy userRecord
-    print $ getField @(Proxy "height") Proxy userRecord
-    print $ getField @(Proxy "isMarried") Proxy userRecord
+    let parsedUser = parseRecord userRecord
+        parsedAddress = parseRecord addressRecord
+        parsedAddressU = parseRecord $ breakTrust $ addressRecord
+        parsedUserU = parseRecord $ breakTrust $ userRecord
+        parsedAddressI = parseRecord $ address parsedUser
+        parsedAddressIU =
+            parseRecord $ breakTrust $ address $ parsedUserU
 
-    print
-        $ getField @(Proxy "zipCode") Proxy
-        $ getField @(Proxy "address") Proxy userRecord
+    print $ zipCode parsedAddress
+    print $ country parsedAddress
 
-    print
-        $ getField @(Proxy "country") Proxy
-        $ getField @(Proxy "address") Proxy userRecord
+    print $ name parsedUser
+    print $ age parsedUser
+    print $ height parsedUser
+    print $ isMarried parsedUser
 
-    putStrLn ""
+    print $ zipCode parsedAddressU
+    print $ country parsedAddressU
 
-    print $ getField @(Proxy "zipCode") Proxy $ breakTrust addressRecord
-    print $ getField @(Proxy "country") Proxy $ breakTrust addressRecord
+    print $ name parsedUserU
+    print $ age parsedUserU
+    print $ height parsedUserU
+    print $ isMarried parsedUserU
 
-    print $ getField @(Proxy "name") Proxy $ breakTrust userRecord
-    print $ getField @(Proxy "age") Proxy $ breakTrust userRecord
-    print $ getField @(Proxy "height") Proxy $ breakTrust userRecord
-    print $ getField @(Proxy "isMarried") Proxy $ breakTrust userRecord
+    print $ zipCode parsedAddressI
+    print $ country parsedAddressI
 
-    print
-        $ getField @(Proxy "zipCode") Proxy
-        $ breakTrust $ getField @(Proxy "address") Proxy $ breakTrust userRecord
-
-    print
-        $ getField @(Proxy "country") Proxy
-        $ breakTrust $ getField @(Proxy "address") Proxy $ breakTrust userRecord
+    print $ zipCode parsedAddressIU
+    print $ country parsedAddressIU

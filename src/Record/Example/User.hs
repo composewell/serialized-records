@@ -18,7 +18,7 @@ data User a b c d e = User
     , height :: c -- Double
     , isMarried :: d -- Bool
     , address :: e -- Record Address
-    }
+    } deriving (Show)
 
 DERIVE_TH([d|instance IsRecordable (User String Int Double Bool (Record Address))|])
 

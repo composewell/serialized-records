@@ -1,3 +1,6 @@
+{-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE MagicHash #-}
+
 module Record.Types where
 
 {-
@@ -24,6 +27,8 @@ import Streamly.Internal.System.IO (unsafeInlineIO)
 import Streamly.Internal.Data.MutByteArray (MutByteArray)
 import System.IO.Unsafe (unsafePerformIO)
 import Streamly.Internal.Data.Array (Array(..))
+import GHC.Base (IO(..))
+import GHC.Exts (touch#)
 
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Unicode.Stream as Encoding
@@ -102,6 +107,7 @@ class IsRecordable a where
     typeHash :: Proxy a -> Array Word8
     recStaticSize :: Proxy a -> Maybe Int
     createRecord :: a -> Record a
+    parseRecord :: Record a -> a
 
 class NullableMeta a where
     isNullable :: Proxy a -> Bool
@@ -241,6 +247,11 @@ instance ValueMapper String Utf8 where
 -- Helpers
 --------------------------------------------------------------------------------
 
+{-# INLINE touch #-}
+touch :: Array a -> IO ()
+touch (Array (Serialize.MutByteArray contents) _ _) =
+    IO $ \s -> case touch# contents s of s' -> (# s', () #)
+
 fromJustErr :: String -> Maybe a -> a
 fromJustErr str = fromMaybe (error str)
 
@@ -317,7 +328,10 @@ getFieldTrustedStatic
     -> Array Word8
     -> b
 getFieldTrustedStatic ix recArr =
-    unsafeInlineIO $ fromValue <$> deserializeAt_ ix recArr
+    unsafeInlineIO $ do
+        val <- fromValue <$> deserializeAt_ ix recArr
+        touch recArr
+        pure val
 
 {-# INLINE getFieldTrustedDynamic #-}
 getFieldTrustedDynamic
@@ -328,7 +342,9 @@ getFieldTrustedDynamic
 getFieldTrustedDynamic ix recArr =
     unsafeInlineIO $ do
         ix1 <- i32_i <$> deserializeAt_ ix recArr
-        fromValue <$> deserializeAt_ ix1 recArr
+        val <- fromValue <$> deserializeAt_ ix1 recArr
+        touch recArr
+        pure val
 
 {-# INLINE getFieldTrustedNullable #-}
 getFieldTrustedNullable
@@ -341,7 +357,10 @@ getFieldTrustedNullable ix recArr =
         ix1 <- i32_i <$> deserializeAt_ ix recArr
         if ix1 == 0
         then pure Nothing
-        else Just . fromValue <$> deserializeAt_ ix1 recArr
+        else do
+            val <- Just . fromValue <$> deserializeAt_ ix1 recArr
+            touch recArr
+            pure val
 
 {-# INLINE getFieldUntrusted #-}
 getFieldUntrusted
@@ -355,4 +374,7 @@ getFieldUntrusted headerLen key recArr =
         ix <- i32_i <$> findFieldIndex headerLen key 40 recArr
         if ix == 0
         then pure Nothing
-        else Just . fromValue <$> deserializeAt_ ix recArr
+        else do
+            val <- Just . fromValue <$> deserializeAt_ ix recArr
+            touch recArr
+            pure val
