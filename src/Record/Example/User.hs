@@ -20,7 +20,7 @@ data User a b c d e = User
     , address :: e -- Record Address
     } deriving (Show)
 
-DERIVE_TH([d|instance IsRecordable (User String Int Double Bool (R Address))|])
+DERIVE_TH([d|instance IsRecordable (User String Int Double Bool Address)|])
 
 {-
 -- TODO: order is decided by the TH combinators

@@ -21,17 +21,17 @@ addressR =
 addressRecord :: Record Address
 addressRecord = createRecord addressR
 
-userR :: User String Int Double Bool (R Address)
+userR :: User String Int Double Bool Address
 userR =
     User
         { name = "Adithya"
         , age = 26
         , height = 183.5
         , isMarried = True
-        , address = R addressR
+        , address = addressR
         }
 
-userRecord :: Record (User String Int Double Bool (R Address))
+userRecord :: Record (User String Int Double Bool Address)
 userRecord = createRecord userR
 
 main :: IO ()
@@ -41,8 +41,8 @@ main = do
         parsedAddress = parseRecord addressRecord
         parsedAddressU = parseRecord $ breakTrust $ addressRecord
         parsedUserU = parseRecord $ breakTrust $ userRecord
-        parsedAddressI = unR $ address parsedUser
-        parsedAddressIU = unR $ address $ parsedUserU
+        parsedAddressI = address parsedUser
+        parsedAddressIU = address $ parsedUserU
 
     print $ zipCode parsedAddressI
     print $ country parsedAddressI

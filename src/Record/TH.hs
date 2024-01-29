@@ -309,6 +309,15 @@ expParseRecord rsm cons = do
           Record False $(varP arrName) -> $(expRecFieldsUntrusted rsm cons)
      |]
 
+decValueMapperInstance :: Type -> Q Dec
+decValueMapperInstance headTy =
+    instanceD
+        (pure [])
+        [t|ValueMapper $(pure headTy) (Record $(pure headTy))|]
+        [ funD 'toValue [ clause [] (normalB [|createRecord|]) [] ]
+        , funD 'fromValue [ clause [] (normalB [|parseRecord|]) [] ]
+        ]
+
 decIsRecordableInstance ::
     Array Word8 -> RecordStaticMeta -> Type -> [DataCon] -> Q Dec
 decIsRecordableInstance typeHashArr rsm@(RecordStaticMeta rsmList) headTy cons =
@@ -535,9 +544,10 @@ deriveSerializedRecInstances ::
     Array Word8 -> RecordStaticMeta -> Q [Dec] -> Q [Dec]
 deriveSerializedRecInstances typeHashArr rsm decs = withReifiedApps decs $ \_ _ headTy cons -> do
     recInst <- decIsRecordableInstance typeHashArr rsm headTy cons
+    valMapInst <- decValueMapperInstance headTy
     -- hasFldInsts <- decsHasField rsm headTy cons
     -- pure $ recInst:hasFldInsts
-    pure [recInst]
+    pure [recInst, valMapInst]
 
 withReifiedApps ::
     Q [Dec] -> (Maybe Overlap -> Cxt -> Type -> [DataCon] -> Q b) -> Q b
