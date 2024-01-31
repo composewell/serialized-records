@@ -140,13 +140,13 @@ instance forall a. IsRecordable a => IsRecordPrimitive (Record a) where
     recPrimAddSizeTo i (Record _ arr) = i + 4 + Array.length arr
     recPrimSerializeAt i target (Record _ (Array src start end)) = do
         let arrLen = end - start
-        i1 <- Serialize.serializeAt i target (i_i32 arrLen)
-        Serialize.putSliceUnsafe src start target i1 arrLen
-        pure (i1 + arrLen)
+        Serialize.putSliceUnsafe src start target i arrLen
+        pure (i + arrLen)
     recPrimDeserializeAt i arr end = do
-        (i1, len32) <- Serialize.deserializeAt i arr end :: IO (Int, Int32)
+        (_, len32) <-
+            Serialize.deserializeAt (i + 2) arr end :: IO (Int, Int32)
         let len = i32_i len32
-            record = Array arr i1 (i1 + len)
+            record = Array arr i (i + len)
             encodedTypeHash = getEncodedTypeHash record
             typeMatch = typeHash (Proxy :: Proxy a) == encodedTypeHash
         pure $ (4 + len, Record typeMatch record)
@@ -347,7 +347,7 @@ getFieldTrustedStatic
     -> b
 getFieldTrustedStatic ix recArr =
     unsafeInlineIO $ do
-        DO(print ix)
+        DO(putStrLn $ "getFieldTrustedStatic:" ++ show ix)
         val <- fromValue <$> deserializeAt_ ix recArr
         touch recArr
         pure val
@@ -360,7 +360,7 @@ getFieldTrustedDynamic
     -> b
 getFieldTrustedDynamic ix recArr =
     unsafeInlineIO $ do
-        DO(print ix)
+        DO(putStrLn $ "getFieldTrustedDynamic:" ++ show ix)
         ix1 <- i32_i <$> deserializeAt_ ix recArr
         val <- fromValue <$> deserializeAt_ ix1 recArr
         touch recArr
@@ -374,7 +374,7 @@ getFieldTrustedNullable
     -> Maybe b
 getFieldTrustedNullable ix recArr =
     unsafeInlineIO $ do
-        DO(print ix)
+        DO(putStrLn $ "getFieldTrustedNullable:" ++ show ix)
         ix1 <- i32_i <$> deserializeAt_ ix recArr
         if ix1 == 0
         then pure Nothing
@@ -392,7 +392,7 @@ getFieldUntrusted
     -> Maybe b
 getFieldUntrusted headerLen key recArr =
     unsafeInlineIO $ do
-        DO(print key)
+        DO(putStrLn $ "getFieldUntrusted:" ++ show key)
         ix <- i32_i <$> findFieldIndex headerLen key 40 recArr
         if ix == 0
         then pure Nothing
