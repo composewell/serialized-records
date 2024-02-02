@@ -201,6 +201,47 @@ instance IsRecordPrimitive Int16 where
     recPrimSerializeAt = Serialize.serializeAt
     recPrimDeserializeAt = Serialize.deserializeAt
 
+instance forall a b.
+    (IsRecordPrimitive a, IsRecordPrimitive b) => IsRecordPrimitive (a, b) where
+    recPrimHash _ = Array.getSliceUnsafe 8 1 arr0To9
+    recPrimStaticSize _ =
+        case ( recPrimStaticSize (Proxy :: Proxy a)
+             , recPrimStaticSize (Proxy :: Proxy b)
+             ) of
+            (Just i, Just j) -> Just (i + j)
+            _ -> Nothing
+    recPrimAddSizeTo i (a, b) = recPrimAddSizeTo (recPrimAddSizeTo i a) b
+    recPrimSerializeAt i arr (a, b) = do
+        i1 <- recPrimSerializeAt i arr a
+        recPrimSerializeAt i1 arr b
+    recPrimDeserializeAt i arr end = do
+        (i1, a) <- recPrimDeserializeAt i arr end
+        (i2, b) <- recPrimDeserializeAt i1 arr end
+        pure (i2, (a, b))
+
+instance forall a b c.
+    (IsRecordPrimitive a, IsRecordPrimitive b, IsRecordPrimitive c) =>
+    IsRecordPrimitive (a, b, c) where
+    recPrimHash _ = Array.getSliceUnsafe 9 1 arr0To9
+    recPrimStaticSize _ =
+        case ( recPrimStaticSize (Proxy :: Proxy a)
+             , recPrimStaticSize (Proxy :: Proxy b)
+             , recPrimStaticSize (Proxy :: Proxy c)
+             ) of
+            (Just i, Just j, Just k) -> Just (i + j + k)
+            _ -> Nothing
+    recPrimAddSizeTo i (a, b, c) =
+        recPrimAddSizeTo (recPrimAddSizeTo (recPrimAddSizeTo i a) b) c
+    recPrimSerializeAt i arr (a, b, c) = do
+        i1 <- recPrimSerializeAt i arr a
+        i2 <- recPrimSerializeAt i1 arr b
+        recPrimSerializeAt i2 arr c
+    recPrimDeserializeAt i arr end = do
+        (i1, a) <- recPrimDeserializeAt i arr end
+        (i2, b) <- recPrimDeserializeAt i1 arr end
+        (i3, c) <- recPrimDeserializeAt i2 arr end
+        pure (i3, (a, b, c))
+
 -- NOTE: Maybe is a special type and is handled differently. The check for maybe
 -- occurs in the header, then and only then the serialization proceeds further.
 instance IsRecordPrimitive a => IsRecordPrimitive (Maybe a) where
